@@ -2,63 +2,70 @@ import streamlit as st
 import pandas as pd
 import joblib
 
+# Load model dan scaler
 model = joblib.load("knn_model.pkl")
 scaler = joblib.load("scaler.pkl")
 
 kategori = ["Rendah", "Sedang", "Tinggi"]
 expected_cols = ["Age", "Sleep_Quality", "Depression_Score", "Anxiety_Score", "Financial_Stress"]
 
-st.title("Aplikasi Prediksi Tingkat Stres Mahasiswa")
+# Mapping teks ke angka
+sleep_map = {"Sangat Buruk": 1, "Buruk": 2, "Cukup": 3, "Baik": 4, "Sangat Baik": 5}
+stress_map = {"Rendah": 1, "Sedang": 2, "Tinggi": 3}
 
-tab1, tab2 = st.tabs(["Form Input Manual", "Upload CSV"])
+st.title("Prediksi Tingkat Stres Mahasiswa")
 
+tab1, tab2 = st.tabs(["Form Manual", "Upload CSV"])
+
+# =============================
+# TAB 1: INPUT MANUAL
 with tab1:
-    usia = st.slider("Usia", 17, 30, 21)
-    tidur = st.selectbox("Kualitas Tidur", ["Sangat Buruk", "Buruk", "Cukup", "Baik", "Sangat Baik"])
-    depresi = st.select_slider("Skor Depresi", range(0,11), 5)
-    cemas = st.select_slider("Skor Kecemasan", range(0,11), 5)
-    stres_uang = st.selectbox("Tingkat Stres Finansial", ["Rendah", "Sedang", "Tinggi"])
+    st.subheader("Masukkan Data Mahasiswa")
 
-    sleep_map = {"Sangat Buruk": 1, "Buruk": 2, "Cukup": 3, "Baik": 4, "Sangat Baik": 5}
-    stress_map = {"Rendah": 1, "Sedang": 2, "Tinggi": 3}
+    usia = st.radio("Usia", options=[17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30], horizontal=True)
+    tidur = st.selectbox("Kualitas Tidur", list(sleep_map.keys()))
+    depresi = st.slider("Skor Depresi (0–10)", 0, 10, 5)
+    cemas = st.slider("Skor Kecemasan (0–10)", 0, 10, 5)
+    stres_uang = st.selectbox("Tingkat Stres Finansial", list(stress_map.keys()))
 
     if st.button("Prediksi"):
-        data = pd.DataFrame([[usia, sleep_map[tidur], depresi, cemas, stress_map[stres_uang]]],
-                            columns=expected_cols)
-        data_scaled = scaler.transform(data)
-        pred = model.predict(data_scaled)[0]
+        input_df = pd.DataFrame([[usia, sleep_map[tidur], depresi, cemas, stress_map[stres_uang]]],
+                                columns=expected_cols)
+        input_scaled = scaler.transform(input_df)
+        pred = model.predict(input_scaled)[0]
         st.success(f"Hasil Prediksi: {kategori[int(pred)]} (label: {pred})")
 
+# =============================
+# TAB 2: UPLOAD CSV
 with tab2:
-    st.subheader("Upload CSV")
+    st.subheader("Upload File CSV")
 
-    uploaded_file = st.file_uploader("Upload file CSV", type=["csv"])
-    if uploaded_file:
-        df = pd.read_csv(uploaded_file)
-        st.write("Data Diupload:")
-        st.dataframe(df.head())
-
-        # Mapping
-        map_kualitas_tidur = {"Sangat Buruk": 1, "Buruk": 2, "Cukup": 3, "Baik": 4, "Sangat Baik": 5}
-        map_stres_uang = {"Rendah": 1, "Sedang": 2, "Tinggi": 3}
-
+    uploaded = st.file_uploader("Unggah file CSV", type=["csv"])
+    if uploaded:
         try:
+            df = pd.read_csv(uploaded)
+            st.write("Data Diupload:")
+            st.dataframe(df.head())
+
+            # Mapping teks ke angka
             for col in df.columns:
-                if df[col].dtype == "object":
-                    df[col] = df[col].replace(map_kualitas_tidur | map_stres_uang)
+                df[col] = df[col].replace(sleep_map | stress_map)
 
             df = df[expected_cols]
             df = df.apply(pd.to_numeric, errors='coerce')
+
             if df.isnull().any().any():
-                st.error("Beberapa nilai tidak bisa dikonversi menjadi angka. Periksa isi file.")
+                st.error("Beberapa nilai tidak valid. Pastikan semua kolom lengkap dan sesuai.")
             else:
                 X_scaled = scaler.transform(df)
                 preds = model.predict(X_scaled)
                 df["Prediksi_Tingkat_Stres"] = [kategori[int(p)] for p in preds]
-                st.success("Prediksi berhasil!")
+
+                st.success("Prediksi Berhasil!")
                 st.dataframe(df)
 
-                csv = df.to_csv(index=False).encode("utf-8")
-                st.download_button("Download Hasil CSV", csv, "hasil_prediksi.csv", "text/csv")
+                csv_out = df.to_csv(index=False).encode("utf-8")
+                st.download_button("Download Hasil Prediksi CSV", csv_out, "hasil_prediksi.csv", "text/csv")
+
         except Exception as e:
-            st.error(f"Terjadi kesalahan saat memproses file: {e}")
+            st.error(f"Terjadi kesalahan: {e}")
